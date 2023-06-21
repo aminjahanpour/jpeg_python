@@ -1,4 +1,6 @@
 import copy
+import os
+
 import bitstring
 
 import numpy as np
@@ -16,7 +18,7 @@ import jpeg_toolbox
 
 fig = plt.figure()
 fig.subplots_adjust(hspace=0.4, wspace=0.4)
-fig.set_size_inches(40, 30, forward=True)
+fig.set_size_inches(10, 7, forward=True)
 
 
 def dct2_sci(block):
@@ -167,7 +169,7 @@ def serialize_quantized_values_per_channel(stacked_quantized, dtc_depth, dc_bits
 
             ret = ret + v
 
-    print(f"{len(ret) / 8000} K bytes")
+    print(f"{len(ret) / 8000} Kb")
 
     return ret
 
@@ -295,9 +297,22 @@ def my_dct_pre_calculated(in_arr):
 
 if __name__ == '__main__':
 
+    # input file
+    file_name = 'shuttle.jpg'
 
-    file_name = 'shuttle.png'
+    # quality factors
 
+    downsample_pixel_count= 1       # used in down-sampling Cr and Cb cahnnels. Higher value results in lower quality.
+    dtc_depth_y = 32                # Y  channel quality. 1 to 64. Higher value results in better quality.
+    dtc_depth_cb = 1                # Cb channel quality. 1 to 64. Higher value results in better quality.
+    dtc_depth_cr = 1                # Cr channel quality. 1 to 64. Higher value results in better quality.
+
+    qt_factor = 1                   # overall quality. 1 to +inf. Higher value results in lower quality.
+
+
+
+    # reading the file
+    org_file_stats = os.stat(file_name)
 
     img_bgr_raw = cv2.imread(file_name)
 
@@ -308,9 +323,8 @@ if __name__ == '__main__':
 
     img_ycbcr = np.apply_along_axis(hue_analysis.rgb_to_ycbcr, 2, img_rgb)
 
-    # applying downsampling on Cb and Cr
-    downsample_pixel_count= 2
 
+    # applying downsampling on Cb and Cr
     img_ycbcr[:, :, 1] = jpeg_toolbox.sub_sample_plane(img_ycbcr[:, :, 1], downsample_pixel_count)
     img_ycbcr[:, :, 2] = jpeg_toolbox.sub_sample_plane(img_ycbcr[:, :, 2], downsample_pixel_count)
 
@@ -322,22 +336,19 @@ if __name__ == '__main__':
     dc_bits = 8
     ac_bits = 8
 
-    dtc_depth_y = 64
-    dtc_depth_cb = 1
-    dtc_depth_cr = 1
-
-    percentile = 0 # no longer in effect
-    qt_factor = 1
 
     sig_groups_count = int(width * height / 64)
 
     frame_dtc_y, stacked_dct_y, frame_dtc_quantized_y, stacked_quantized_y = build_dct(img_y, qt_factor, this_is_y=True)
+    print("serializing quantized  Y: ", end='')
     channel_bitstreams_per_channel_y = serialize_quantized_values_per_channel(stacked_quantized_y, dtc_depth_y, dc_bits, ac_bits)
 
     frame_dtc_cb, stacked_dct_cb, frame_dtc_quantized_cb, stacked_quantized_cb = build_dct(img_cb, qt_factor, this_is_y=False)
+    print("serializing quantized Cb: ", end='')
     channel_bitstreams_per_channel_cb = serialize_quantized_values_per_channel(stacked_quantized_cb, dtc_depth_cb, dc_bits, ac_bits)
 
     frame_dtc_cr, stacked_dct_cr, frame_dtc_quantized_cr, stacked_quantized_cr = build_dct(img_cr, qt_factor, this_is_y=False)
+    print("serializing quantized Cr: ", end='')
     channel_bitstreams_per_channel_cr = serialize_quantized_values_per_channel(stacked_quantized_cr, dtc_depth_cr, dc_bits, ac_bits)
 
     full_raw_bitstring = channel_bitstreams_per_channel_y + channel_bitstreams_per_channel_cb + channel_bitstreams_per_channel_cr
@@ -346,14 +357,12 @@ if __name__ == '__main__':
 
 
 
-    print("uncompressed bitstream:",len(full_raw_bitstring)/8000, 'Kb')
+    print("uncompressed bitstream  :",len(full_raw_bitstring)/8000, 'Kb')
 
     aeb_byte_stream = dump_bitstring_to_file_as_bytes(full_raw_bitstring, "my_jpg.txt")
 
 
     assert len(full_raw_bitstring) == int(sig_groups_count * (dtc_depth_y + dtc_depth_cb+ dtc_depth_cr) * 8)
-
-    pb = [full_raw_bitstring[i:i + 8] for i in range(0, len(full_raw_bitstring), 8)]
 
 
     dequantized_dct_frame_y  = deserialize_quantized_values(full_raw_bitstring[:int(sig_groups_count * dtc_depth_y * 8)], dtc_depth_y, dc_bits, ac_bits, qt_factor, this_is_y=True)
@@ -361,9 +370,6 @@ if __name__ == '__main__':
     dequantized_dct_frame_cr = deserialize_quantized_values(full_raw_bitstring[int(sig_groups_count * (dtc_depth_y + dtc_depth_cb)) * 8:], dtc_depth_cr, dc_bits, ac_bits, qt_factor, this_is_y=False)
 
 
-
-
-    # assert len(full_raw_bitstring) / 8 == len(aeb_byte_stream)
 
 
     zlib_encoded = zlib.compress(aeb_byte_stream)
@@ -375,16 +381,20 @@ if __name__ == '__main__':
 
     assert all([x == y for x,y in zip (aeb_byte_stream, zlib_decoded)])
 
-    # half_compression_ratio = len(halfman_encoded) / len(full_raw_aeb)
+
     zlib_compression_ratio = 8*len(zlib_encoded) / len(full_raw_bitstring)
 
+
+    print('applying zlib...')
+
     # print(f'compression_ratio: {half_compression_ratio}, output size: {len(halfman_encoded) / 8000} Kb')
-    print(f'compression_ratio: {zlib_compression_ratio}, output size: {len(zlib_encoded)/1000} Kb')
+    print(f'output size             : {len(zlib_encoded)/1024} Kb')
+    print(f'compression ratio: {round(zlib_compression_ratio, 2)}')
 
 
 
 
-
+    # Decompressing
 
     idtc_y_arr = recover_dct(dequantized_dct_frame_y)
     idtc_cb_arr = recover_dct(dequantized_dct_frame_cb)
@@ -398,17 +408,19 @@ if __name__ == '__main__':
     img_ycrcb_opencv[:, :, 2] = idtc_cb_arr  # np.zeros(shape=(height, width))
 
     img_bgr = cv2.cvtColor(img_ycrcb_opencv, cv2.COLOR_YCrCb2BGR)
-    # cv2.imwrite(f"./dci_output_{len(zlib_encoded)/1000}_Kb.bmp", img_bgr)
+    # cv2.imwrite(f"./dci_output_{len(zlib_encoded)/1024}_Kb.bmp", img_bgr)
 
 
-    ax = fig.add_subplot(2, 1, 1)
+    ax = fig.add_subplot(1, 2, 1)
     ax.imshow(img_rgb)
-    plt.title(f'original')
+    plt.title(f'Original ({round(org_file_stats.st_size / 1024,2)} Kb)')
 
-    ax = fig.add_subplot(2, 1, 2)
+    ax = fig.add_subplot(1, 2, 2)
     ax.imshow(cv2.cvtColor(img_bgr, cv2.COLOR_BGR2RGB))
-    plt.title(f'{len(zlib_encoded)/1000}_Kb')
+    plt.title(f'JPEG output ({round(len(zlib_encoded) / 1024,2)} Kb)')
 
+
+    plt.tight_layout()
 
     plt.show()
 
