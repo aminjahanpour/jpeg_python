@@ -3,8 +3,8 @@
 This is a pure python implementation of the JPEG compression algorithm.
 
 My learning sources:
-- [Dr. Bill Bird (University of Victori) CSC485B course](https://www.youtube.com/watch?v=95D99HEn4xU&list=PLU4IQLU9e_OpnkbCS_to64F_vw5yyg4HB)
-- [Computerphile Video (University of Nottingham )](https://www.youtube.com/watch?v=Q2aEzeMDHMA&list=PLSL85pYTZnmvQVOfuK_1XuxUX9e6XSiGA&index=2)
+- [Dr. Bill Bird (University of Victoria) CSC485B course](https://www.youtube.com/watch?v=95D99HEn4xU&list=PLU4IQLU9e_OpnkbCS_to64F_vw5yyg4HB)
+- [Computerphile Video (University of Nottingham)](https://www.youtube.com/watch?v=Q2aEzeMDHMA&list=PLSL85pYTZnmvQVOfuK_1XuxUX9e6XSiGA&index=2)
 
 
 To give it a try, change the below line in [jpeg_works.py](jpeg_works.py) and run the file.
