@@ -1,4 +1,4 @@
-# JPEG in pure Python
+# JPEG in Pure Python
 
 This is a pure python implementation of the JPEG compression algorithm.
 
